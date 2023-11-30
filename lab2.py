@@ -7,19 +7,23 @@ import numpy as np
 from deap import algorithms, base, creator, tools, gp
 from functools import partial
 
+#визначення нових функцій
 def division_operator(numenator, denumenator):
     if denumenator == 0:
         return 1
     return numenator / denumenator
 
+#Визначення оціночної функії
 def eval_func(individual, points, toolbox):
+    #Переробка дерева виражень в викличену функцію
     func = toolbox.compile(expr=individual)
+    #Визначення середньоквадратичної помилки
     mse = sum((func(x/100.0, y/100.0, z/100.0) - (1 / (1 + (x - 2)**2 + (y + 1)**2 + (z - 1)**2)))**2
               for x, y, z in points)
 
     return mse / len(points),
 
-
+#функція для створення набору інструментів
 def create_toolbox():
     pset = gp.PrimitiveSet("MAIN", 3)
     pset.addPrimitive(operator.add, 2)
