@@ -1,83 +1,58 @@
-#символічна регресія ст231
 import operator
 import math
 import random
-
 import numpy as np
 from deap import algorithms, base, creator, tools, gp
 from functools import partial
 
-#визначення нових функцій
+
 def division_operator(numenator, denumenator):
-    if denumenator == 0:
-        return 1
-    return numenator / denumenator
+    return numenator / denumenator if denumenator != 0 else 1
 
-#Визначення оціночної функії
-def eval_func(individual, points, toolbox):
-    #Переробка дерева виражень в викличену функцію
-    func = toolbox.compile(expr=individual)
-    #Визначення середньоквадратичної помилки
-    mse = sum((func(x/100.0, y/100.0, z/100.0) - (1 / (1 + (x - 2)**2 + (y + 1)**2 + (z - 1)**2)))**2
-              for x, y, z in points)
 
-    return mse / len(points),
+def eval_func(individual):
+    x, y, z = individual
+    mse = 1 / (1 + (x - 2) ** 2 + (y + 1) ** 2 + (z - 1) ** 2)
 
-#функція для створення набору інструментів
+    return mse,
+
+
 def create_toolbox():
-    pset = gp.PrimitiveSet("MAIN", 3)
-    pset.addPrimitive(operator.add, 2)
-    pset.addPrimitive(operator.sub, 2)
-    pset.addPrimitive(operator.mul, 2)
-    pset.addPrimitive(division_operator, 2)
-    pset.addPrimitive(operator.neg, 1)
-    pset.addPrimitive(math.cos, 1)
-    pset.addPrimitive(math.sin, 1)
-
-    pset.addEphemeralConstant("rand101", partial(random.randint, -1, 1))
-
-    creator.create("FitnessMax", base.Fitness, weights=(-1.0,))
-    creator.create("Individual", gp.PrimitiveTree, fitness=creator.FitnessMax)
+    creator.create("FitnessMax", base.Fitness, weights=(1.0,))
+    creator.create("Individual", list, fitness=creator.FitnessMax)
 
     toolbox = base.Toolbox()
-
-    toolbox.register("expr", gp.genHalfAndHalf, pset=pset, min_=1, max_=2)
-    toolbox.register("individual", tools.initIterate, creator.Individual, toolbox.expr)
+    toolbox.register("attr_float", random.uniform, -10, 10)  # Діапазон для x, y, z
+    toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_float, n=3)
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
-    toolbox.register("compile", gp.compile, pset=pset)
-    toolbox.register("evaluate", eval_func, points=[(x/10., y, z) for x, y, z in zip(range(-100, 100),
-                                                                                     [random.uniform(-1, 1) for _ in range(200)],
-                                                                                     [random.uniform(-1, 1) for _ in range(200)])],
-                                                                                        toolbox=toolbox)
-
+    toolbox.register("evaluate", eval_func)
+    toolbox.register("mate", tools.cxBlend, alpha=0.5)
+    toolbox.register("mutate", tools.mutGaussian, mu=0, sigma=1, indpb=0.2)
     toolbox.register("select", tools.selTournament, tournsize=3)
-    toolbox.register("mate", gp.cxOnePoint)
-    toolbox.register("expr_mut", gp.genFull, min_=0, max_=2)
-    toolbox.register("mutate", gp.mutUniform, expr=toolbox.expr_mut, pset=pset)
-
-    toolbox.decorate("mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
 
     return toolbox
+
 
 if __name__ == "__main__":
     random.seed(7)
     toolbox = create_toolbox()
 
-    population = toolbox.population(n=450)
-    hall_of_fame = tools.HallOfFame(1)
+    population = toolbox.population(n=2)
 
-    stats_fit = tools.Statistics(lambda x: x.fitness.values)
-    stats_size = tools.Statistics(len)
+    # Записуємо історію максимумів
+    max_history = []
 
-    mstats = tools.MultiStatistics(fitness=stats_fit, size=stats_size)
-    mstats.register("avg", np.mean)
-    mstats.register("std", np.std)
-    mstats.register("min", np.min)
-    mstats.register("max", np.max)
+    for gen in range(50):  # Кількість поколінь (ngen)
+        # Запускаємо еволюцію для одного покоління
+        algorithms.eaMuPlusLambda(population, toolbox, mu=10, lambda_=40, cxpb=0.7, mutpb=0.2, ngen=1, stats=None,
+                                  halloffame=None, verbose=False)
 
-    probab_crossover = 0.4
-    probab_mutate = 0.2
-    num_generations = 60
+        # Знаходимо і виводимо максимум для поточного покоління
+        best_individual = tools.selBest(population, k=1)[0]
+        best_values = best_individual.fitness.values
+        max_fitness = 1 / best_values[0]
+        max_history.append(max_fitness)
 
-    population, log = algorithms.eaSimple(population, toolbox, probab_crossover, probab_mutate, num_generations,
-                                          stats=mstats, halloffame=hall_of_fame, verbose=True)
+        print(f"Покоління {gen + 1}, Знайдений максимум: {max_fitness}")
+        print("Параметри x, y, z:", best_individual)
+
